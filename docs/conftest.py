@@ -25,7 +25,7 @@ def test_params(request):
     config_path = request.config.getoption("--config")
     if not config_path:
         # Fallback to papermill parameter if --config isn't provided
-        config_path = os.environ.get("CONFIG_PATH", "params.yaml")
+        config_path = os.environ.get("CONFIG_PATH", "../params.example.yaml")
 
     with open(config_path, "r") as f:
         params = yaml.safe_load(f)
@@ -220,6 +220,4 @@ def bucket_with_lock(lockeable_bucket_name, s3_client, lock_mode):
     yield bucket_name
 
     # TBD teardown
-
-
 
