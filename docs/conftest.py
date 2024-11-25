@@ -11,6 +11,8 @@ from s3_helpers import (
     create_bucket_and_wait,
     delete_object_and_wait,
     put_object_and_wait,
+    delete_policy_and_wait,
+    set_acl_public_and_wait,
     cleanup_old_buckets,
     get_spec_path,
 )
@@ -30,6 +32,8 @@ def test_params(request):
     with open(config_path, "r") as f:
         return yaml.safe_load(f)
 
+
+
 @pytest.fixture
 def default_profile(test_params):
     """
@@ -37,17 +41,26 @@ def default_profile(test_params):
     """
     return test_params["profiles"][test_params.get("default_profile_index", 0)]
 
+
+
 @pytest.fixture
 def lock_mode(default_profile):
     return default_profile["lock_mode"]
 
+
+
 @pytest.fixture
-def profile_name(default_profile):
+def profile_name(test_params, default_profile) -> list[str]:
+    if test_params.get("default_profile_index") == 0:
+        return [default_profile]
+
     return (
-        default_profile.get("profile_name")
-        if default_profile.get("profile_name")
+        test_params.get("profiles", [])
+        if test_params.get("number_custom_profile_names")
         else pytest.skip("This test requires a profile name")
     )
+
+
 
 @pytest.fixture
 def mgc_path(default_profile):
@@ -86,6 +99,22 @@ def s3_client(default_profile):
         )
     return session.client("s3", endpoint_url=default_profile.get("endpoint_url"))
 
+
+@pytest.fixture
+def multiple_s3_client(profile_name) -> list:
+    sessions_list= []
+
+    for names in profile_name:
+        names = names['profile_name']
+        if names:
+            session = boto3.Session(profile_name=names)
+            sessions_list.append(session.client("s3"))
+            continue
+
+    return sessions_list
+
+    
+
 @pytest.fixture
 def bucket_name(request, s3_client):
     test_name = request.node.name.replace("_", "-")
@@ -96,6 +125,9 @@ def bucket_name(request, s3_client):
 
     # Teardown: delete the bucket after the test
     delete_bucket_and_wait(s3_client, unique_name)
+
+
+
 
 @pytest.fixture
 def existing_bucket_name(s3_client):
@@ -109,7 +141,15 @@ def existing_bucket_name(s3_client):
     yield bucket_name
 
     # Teardown: delete the bucket after the test
-    delete_bucket_and_wait(s3_client, bucket_name)
+    #
+    #delete_policy_and_wait(s3_client, bucket_name)
+    #set_acl_public_and_wait(s3_client, bucket_name)
+    #delete_bucket_and_wait(s3_client, bucket_name)
+    
+    cleanup_old_buckets(s3_client, bucket_name, lock_mode=None, retention_days=0)
+
+#
+
 
 @pytest.fixture
 def bucket_with_one_object(s3_client):
@@ -120,7 +160,7 @@ def bucket_with_one_object(s3_client):
     # Define the object key and content, then upload the object
     object_key = "test-object.txt"
     content = b"Sample content for testing presigned URLs."
-    put_object_and_wait(s3_client, bucket_name, object_key, content)
+    put_object_and_wait(s3_client, bucket_name, object_key)
 
     # Yield the bucket name and object details to the test
     yield bucket_name, object_key, content

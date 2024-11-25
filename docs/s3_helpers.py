@@ -6,9 +6,7 @@ import uuid
 import logging
 import pytest
 import yaml
-from pathlib import Path
-import ipynbname
-import json
+import botocore
 
 def get_spec_path():
     spec_path = os.getenv("SPEC_PATH")
@@ -21,7 +19,7 @@ def get_spec_path():
         # fallback to local path
         return "./"
 
-def run_example(dunder_name, test_name, config="../params.example.yaml"):
+def run_example(dunder_name, spec_name, example_name, config="params.yaml", docs_dir="."):
     if dunder_name == "__main__":
         # When executing a notebook pass config path as env var instead of pytest custom arg
         os.environ["CONFIG_PATH"] = os.environ.get("CONFIG_PATH", config)
@@ -30,18 +28,20 @@ def run_example(dunder_name, test_name, config="../params.example.yaml"):
         pytest.main([
             "-qq", 
             "--color", "no", 
-            # "-s", 
-            # "--log-cli-level", "INFO",
-            f"{get_spec_path()}::{test_name}"
+            "-s", 
+            "--log-cli-level", "INFO",
+            f"{docs_dir}/{spec_name}_test.py::{example_name}"
         ])
- 
+
 
 def generate_unique_bucket_name(base_name="my-unique-bucket"):
     unique_id = uuid.uuid4().hex[:6]  # Short unique suffix
     return f"{base_name}-{unique_id}"
 
+
 def delete_bucket_and_wait(s3_client, bucket_name):
     try:
+        delete_all_objects(s3_client, bucket_name)
         s3_client.delete_bucket(Bucket=bucket_name)
     except s3_client.exceptions.NoSuchBucket:
         logging.info("Bucket already deleted by someone else.")
@@ -50,6 +50,7 @@ def delete_bucket_and_wait(s3_client, bucket_name):
     waiter = s3_client.get_waiter('bucket_not_exists')
     waiter.wait(Bucket=bucket_name)
     logging.info(f"Bucket '{bucket_name}' confirmed as deleted.")
+
 
 def create_bucket(s3_client, bucket_name):
     # anything different than us-east-1 must have LocationConstraint on aws
@@ -60,6 +61,7 @@ def create_bucket(s3_client, bucket_name):
             CreateBucketConfiguration={'LocationConstraint': region}
         )
     return s3_client.create_bucket(Bucket=bucket_name)
+
 
 def create_bucket_and_wait(s3_client, bucket_name):
     try:
@@ -72,6 +74,7 @@ def create_bucket_and_wait(s3_client, bucket_name):
     waiter = s3_client.get_waiter('bucket_exists')
     waiter.wait(Bucket=bucket_name)
     logging.info(f"Bucket '{bucket_name}' confirmed as created.")
+
 
 def delete_object_and_wait(s3_client, bucket_name, object_key):
     try:
@@ -98,7 +101,7 @@ def put_object_and_wait(s3_client, bucket_name, object_key, content):
     put_response = s3_client.put_object(Bucket=bucket_name, Key=object_key, Body=content)
     version_id = put_response.get("VersionId", None)
 
-    # Wait for the object to exist
+        # Wait for the object to exist
     waiter = s3_client.get_waiter('object_exists')
     waiter.wait(Bucket=bucket_name, Key=object_key)
 
@@ -109,6 +112,32 @@ def put_object_and_wait(s3_client, bucket_name, object_key, content):
     )
 
     return version_id
+
+def delete_all_objects(s3_client, bucket_name):
+    try:
+        response = s3_client.list_objects_v2(Bucket=bucket_name)
+    except s3_client.exceptions.ClientError as e:
+        return logging.warning(e)
+
+    if 'Contents' in response:
+        for obj in response['Contents']:
+            delete_object_and_wait(s3_client, bucket_name, obj['Key'])
+
+
+def delete_policy_and_wait(s3_client, Bucket_name):
+    try:
+        s3_client.delete_bucket_policy(Bucket=Bucket_name)
+    except s3_client.exceptions.ClientError as e:
+        raise logging.warning(e)
+
+
+def set_acl_public_and_wait(s3_client, Bucket_name):
+    try:
+        s3_client.put_bucket_acl(Bucket=Bucket_name, ACL = 'public-read-write')
+    except s3_client.exceptions.ClientError as e:
+        raise logging.warning(e)
+
+
 
 def cleanup_old_buckets(s3_client, base_name, lock_mode=None, retention_days=1):
     """
@@ -173,6 +202,97 @@ def delete_version(s3_client, bucket_name, version, lock_mode):
         )
         logging.info(f"Deleted version {version_id} of object {version['Key']} in bucket {bucket_name}")
     except ClientError as e:
+        # Retry deletion with governance bypass if necessary
+        if e.response["Error"]["Code"] == "AccessDenied" and lock_mode == "GOVERNANCE":
+            logging.info(f"Retrying deletion of version {version_id} with governance bypass")
+            s3_client.delete_object(
+                Bucket=bucket_name,
+                Key=version['Key'],
+                VersionId=version_id,
+                BypassGovernanceRetention=True
+            )
+        else:
+            logging.warning(
+                f"Failed to delete version {version_id} of object {version['Key']} in bucket {bucket_name}: {e}"
+            )
+
+
+def create_bucket_versioning(s3_client, bucket_name, VersioningConfiguration):
+    try:
+        response = s3_client.put_bucket_versioning(Bucket=bucket_name,VersioningConfiguration=VersioningConfiguration)
+    except s3_client.exceptions.ClientError as e:
+        logging.warning(f"Versioning '{e}' not created.")
+        return
+
+    return response
+
+
+
+def cleanup_old_buckets(s3_client, base_name, lock_mode=None, retention_days=1):
+    """
+    Delete buckets with the specified base name that are older than the retention period.
+    Attempt to delete versions and delete markers, retry with governance bypass if needed.
+
+    :param s3_client: Boto3 S3 client
+    :param base_name: Prefix of the bucket names to target
+    :param lock_mode: Lock mode ('GOVERNANCE', 'COMPLIANCE', or None)
+    :param retention_days: Age threshold for buckets to be cleaned up (ignored for GOVERNANCE)
+    """
+
+    response = s3_client.list_buckets()
+    for bucket in response['Buckets']:
+        bucket_name = bucket['Name']
+        if bucket_name.startswith(base_name):
+            creation_date = bucket['CreationDate']
+            age_threshold = datetime.now(creation_date.tzinfo) - timedelta(days=retention_days)
+
+            if lock_mode == "GOVERNANCE" or creation_date < age_threshold:
+                try:
+                    # Get bucket versioning info
+                    bucket_versioning = s3_client.get_bucket_versioning(Bucket=bucket_name)
+                    print('a')
+
+                    # If bucket is versioned, delete all object versions and delete markers
+                    if bucket_versioning.get('Status') == 'Enabled':
+                        paginator = s3_client.get_paginator('list_object_versions')
+                        for page in paginator.paginate(Bucket=bucket_name):
+                            # Delete object versions
+                            for version in page.get('Versions', []):
+                                delete_version(
+                                    s3_client, bucket_name, version, lock_mode
+                                )
+                            # Delete markers
+                            for marker in page.get('DeleteMarkers', []):
+                                delete_version(
+                                    s3_client, bucket_name, marker, lock_mode
+                                )
+
+                    s3_client.delete_bucket(Bucket=bucket_name)
+
+                    # Delete the bucket itself
+                    logging.info(f"Deleted old bucket '{bucket_name}' created on {creation_date}")
+                except s3_client.exceptions.ClientError as e:
+                    assert logging.warning(f"Could not delete bucket '{bucket_name}': {e}")
+
+def delete_version(s3_client, bucket_name, version, lock_mode):
+    """
+    Attempt to delete an object version or delete marker.
+
+    :param s3_client: Boto3 S3 client.
+    :param bucket_name: Name of the bucket.
+    :param version: The version or delete marker to delete.
+    :param lock_mode: Lock mode ('GOVERNANCE', 'COMPLIANCE', or None).
+    """
+    version_id = version['VersionId']
+    try:
+        # Attempt to delete the version
+        s3_client.delete_object(
+            Bucket=bucket_name,
+            Key=version['Key'],
+            VersionId=version_id
+        )
+        logging.info(f"Deleted version {version_id} of object {version['Key']} in bucket {bucket_name}")
+    except s3_client.exceptions.ClientError as e:
         # Retry deletion with governance bypass if necessary
         if e.response["Error"]["Code"] == "AccessDenied" and lock_mode == "GOVERNANCE":
             logging.info(f"Retrying deletion of version {version_id} with governance bypass")
