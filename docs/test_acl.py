@@ -4,11 +4,10 @@ from s3_helpers import(
     put_object_and_wait,
 )
 
+# test invalid arguments for acl
 @pytest.mark.parametrize("acl_name", [
     "errado", "''"
 ]) 
-
-# test invalid arguments for acl
 def test_invalid_put_bucket_acl(s3_client,existing_bucket_name, acl_name):
     try:
         s3_client.put_bucket_acl(Bucket = existing_bucket_name, ACL = acl_name)
@@ -17,30 +16,26 @@ def test_invalid_put_bucket_acl(s3_client,existing_bucket_name, acl_name):
         assert e.response['Error']['Code'] == 'InvalidArgument'
 
 
+# Try to create acl with different permissions
 @pytest.mark.parametrize("acl_name", [
     'private',
     'public-read',
     'public-read-write',
     'authenticated-read',
 ]) 
-
-# Try to create acl with different permissions
 def test_put_bucket_acl(s3_client, existing_bucket_name, acl_name):
     response =  s3_client.put_bucket_acl(Bucket = existing_bucket_name, ACL = acl_name)
 
     assert response['ResponseMetadata']['HTTPStatusCode'] == 200
 
-# try to get a acl file from bucket
 
+# Test the creater profile always has FULL CONTROL of the bucket
 @pytest.mark.parametrize("acl_name", [
     'private',
     'public-read',
     'public-read-write',
     'authenticated-read',
 ]) 
-
-
-# Test the creater profile always has FULL CONTROL of the bucket
 def test_get_bucket_acl(s3_client, existing_bucket_name,acl_name):
     s3_client.put_bucket_acl(Bucket = existing_bucket_name, ACL = acl_name)
     response = s3_client.get_bucket_acl(Bucket=existing_bucket_name)
