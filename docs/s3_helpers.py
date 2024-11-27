@@ -7,6 +7,8 @@ import logging
 import pytest
 import yaml
 import botocore
+import ipynbname
+from pathlib import Path
 
 def get_spec_path():
     spec_path = os.getenv("SPEC_PATH")

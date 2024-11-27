@@ -28,7 +28,7 @@ def test_params(request):
     """
     Loads test parameters from a config file or environment variable.
     """
-    config_path = request.config.getoption("--config") or os.environ.get("CONFIG_PATH", "../params.example.yaml")
+    config_path = request.config.getoption("--config") or os.environ.get("CONFIG_PATH", "params/br-se1.yaml")
     with open(config_path, "r") as f:
         return yaml.safe_load(f)
 
@@ -84,7 +84,7 @@ def active_mgc_workspace(profile_name, mgc_path):
     logging.info(f"mcg workspace set stdout: {result.stdout}")
     return profile_name
 
-@pytest.fixture
+@pytest.fixture(autouse=True)
 def s3_client(default_profile):
     """
     Creates a boto3 S3 client using profile credentials or explicit config.
@@ -110,10 +110,9 @@ def multiple_s3_client(profile_name) -> list:
             session = boto3.Session(profile_name=names)
             sessions_list.append(session.client("s3"))
             continue
-
-    return sessions_list
-
     
+    print(profile_name)
+    return sessions_list 
 
 @pytest.fixture
 def bucket_name(request, s3_client):
@@ -125,9 +124,6 @@ def bucket_name(request, s3_client):
 
     # Teardown: delete the bucket after the test
     delete_bucket_and_wait(s3_client, unique_name)
-
-
-
 
 @pytest.fixture
 def existing_bucket_name(s3_client):
@@ -148,9 +144,6 @@ def existing_bucket_name(s3_client):
     
     cleanup_old_buckets(s3_client, bucket_name, lock_mode=None, retention_days=0)
 
-#
-
-
 @pytest.fixture
 def bucket_with_one_object(s3_client):
     # Generate a unique bucket name and ensure it exists
@@ -160,7 +153,7 @@ def bucket_with_one_object(s3_client):
     # Define the object key and content, then upload the object
     object_key = "test-object.txt"
     content = b"Sample content for testing presigned URLs."
-    put_object_and_wait(s3_client, bucket_name, object_key)
+    put_object_and_wait(s3_client, bucket_name, object_key, content="Banana")
 
     # Yield the bucket name and object details to the test
     yield bucket_name, object_key, content
@@ -216,7 +209,6 @@ def bucket_with_one_object_and_lock_enabled(s3_client, lock_mode, versioned_buck
 
     # Yield details to tests
     yield bucket_name, object_key, object_version
-
 
 @pytest.fixture
 def lockeable_bucket_name(s3_client, lock_mode):
@@ -303,3 +295,18 @@ def bucket_with_lock_and_object(s3_client, bucket_with_lock):
 
     # Return bucket name, object key, and version ID
     return bucket_name, object_key, object_version
+
+@pytest.fixture
+def bucket_with_one_object_acl(s3_client, request,bucket_with_one_object):
+    base_name = "bucket_object_acl"
+
+    # Generate a unique name and create a versioned bucket
+    bucket_name = generate_unique_bucket_name(base_name=base_name)
+    bucket_name, object_key, url = bucket_with_one_object
+
+    s3_client.put_object_acl(Bucket=bucket_name, Key=object_key, ACL= request.param)
+
+    logging.info(f"Created bucket: {bucket_name} with object with acl {request.param}")
+
+    # Yield the bucket name for tests
+    yield bucket_name, object_key, url

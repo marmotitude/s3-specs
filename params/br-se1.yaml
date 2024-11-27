@@ -1,6 +1,7 @@
-docs_dir: "./docs"
-default_profile_index: 0
+default_profile_index: 1
+number_custom_profile_names: 2
 profiles:
-  -
-    profile_name: "br-se1"
+  - profile_name: "luis"
+    lock_mode: "COMPLIANCE"
+  - profile_name: "test2"
     lock_mode: "COMPLIANCE"
