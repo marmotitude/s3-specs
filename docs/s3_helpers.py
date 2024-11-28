@@ -35,7 +35,6 @@ def run_example(dunder_name, test_name, config="../params.example.yaml"):
             f"{get_spec_path()}::{test_name}"
         ])
  
-
 def generate_unique_bucket_name(base_name="my-unique-bucket"):
     unique_id = uuid.uuid4().hex[:6]  # Short unique suffix
     return f"{base_name}-{unique_id}"
@@ -187,12 +186,28 @@ def delete_version(s3_client, bucket_name, version, lock_mode):
                 f"Failed to delete version {version_id} of object {version['Key']} in bucket {bucket_name}: {e}"
             )
 
+def change_policies_json(bucket, policy_args: dict) -> json:
+    
+    """
+    From a policy changes its contest with the requested params and transform it into a JSON.
 
-def change_policies_json(Bucket, policy_dict, actions, effect = 'Allow'):
+    :param s3_client: Boto3 S3 client.
+    :param bucket_name: Name of the bucket.
+    :param version: The version or delete marker to delete.
+    :param lock_mode: Lock mode ('GOVERNANCE', 'COMPLIANCE', or None).
+    
+    """
+    
+    #parse the request
+    policy = policy_args['policy_dict']
+    actions = policy_args['actions']
+    effect = policy_args['effect']
+    
     #change arguments inside of the policy dict
-    policy_dict["Statement"][0]["Resource"] = Bucket + "/*"
-    policy_dict["Statement"][0]["Action"] = actions
-    policy_dict["Statement"][0]["Effect"] = effect
-    return json.dumps(policy_dict)
+    policy["Statement"][0]["Resource"] = bucket + "/*"
+    policy["Statement"][0]["Action"] = actions
+    policy["Statement"][0]["Effect"] = effect
+    
+    return json.dumps(policy)
 
 

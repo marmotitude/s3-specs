@@ -267,7 +267,7 @@ def bucket_with_lock_and_object(s3_client, bucket_with_lock):
     
     
 @pytest.fixture
-def bucket_with_policy(s3_client, existing_bucket_name, request):
+def bucket_with_policy(s3_client, request):
     """
     Prepares an S3 bucket with object and defines its obejct acl.
 
@@ -276,15 +276,16 @@ def bucket_with_policy(s3_client, existing_bucket_name, request):
     :param request: dictionary of policy related arguments
     :return: bucket_name.
     """
+        
+    # Generate a unique name and create a versioned bucket
+    base_name = "policy-bucket"
+    bucket_name = generate_unique_bucket_name(base_name=base_name)
+    create_bucket_and_wait(s3_client, bucket_name)
     
-    
-    bucket_name = "bucket_policy"
-    #Create one bucket with an object
-    bucket_name = existing_bucket_name
-    
-    policy = change_policies_json(Bucket=bucket_name, policy_dict= request.param['policy_dict'], actions= request.param['actions'], effect=request.param['effect'])
-    
+    policy = change_policies_json(bucket=bucket_name, policy_args=request.param)
     s3_client.put_bucket_policy(Bucket=bucket_name, Policy = policy)
     
     # Yield the bucket name and object key to the test
     yield bucket_name
+    
+    
