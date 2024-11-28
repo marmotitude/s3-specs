@@ -9,6 +9,7 @@ import yaml
 from pathlib import Path
 import ipynbname
 import json
+import time
 
 def get_spec_path():
     spec_path = os.getenv("SPEC_PATH")
@@ -82,6 +83,27 @@ def delete_object_and_wait(s3_client, bucket_name, object_key):
     waiter = s3_client.get_waiter('object_not_exists')
     waiter.wait(Bucket=bucket_name, Key=object_key)
     logging.info(f"Object '{object_key}' in bucket '{bucket_name}' confirmed as deleted.")
+
+def delete_all_objects_and_wait(s3_client, bucket_name):
+    response = s3_client.list_objects_v2(Bucket=bucket_name)
+    if 'Contents' in response:
+        for obj in response['Contents']:
+            delete_object_and_wait(s3_client, bucket_name, obj['Key'])
+
+
+def delete_policy_and_bucket(s3_client, bucket_name):
+    
+    
+    for _ in range(4):
+        try:
+            s3_client.delete_bucket_policy(Bucket=bucket_name)
+        except s3_client.exceptions.NoSuchBucketPolicy:
+            logging.info("Bucket policy already deleted or not found.")
+            return
+        time.sleep(2)
+
+
+    logging.info(f"Policy for bucket '{bucket_name}' confirmed as deleted.")
 
 def put_object_and_wait(s3_client, bucket_name, object_key, content):
     """

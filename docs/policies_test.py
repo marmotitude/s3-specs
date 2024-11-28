@@ -91,23 +91,27 @@ def test_setup_policies(s3_client, existing_bucket_name, policies_args):
     assert s3_client.put_bucket_policy(Bucket=bucket_name, Policy=policies)
 
     
-@pytest.mark.parametrize('bucket_with_policy, expected_output', [
-    ({"policy_dict": policy_dict, "actions": "s3:PutObject", "effect": "Deny"}, "AccessDeniedByBucketPolicy"),
-    ({"policy_dict": policy_dict, "actions": "s3:GetObject", "effect": "Deny"}, "AccessDeniedByBucketPolicy"),
-    ({"policy_dict": policy_dict, "actions": "s3:DeleteObject", "effect": "Deny"}, "AccessDeniedByBucketPolicy")
-], indirect = ['bucket_with_policy'])
+@pytest.mark.parametrize('bucket_with_one_object_policy, boto3_action', [
+    ({"policy_dict": policy_dict, "actions": "s3:PutObject", "effect": "Deny"}, 'put_object'),
+    ({"policy_dict": policy_dict, "actions": "s3:GetObject", "effect": "Deny"}, 'get_object'),
+    ({"policy_dict": policy_dict, "actions": "s3:DeleteObject", "effect": "Deny"}, 'delete_object')
+], indirect = ['bucket_with_one_object_policy'])
 
-#add custom json with deny to this test
-def test_operations_bucket_policies(s3_client, bucket_with_policy, expected_output):
-    
-    bucket_name = bucket_with_policy
-    object_key = "PolicyObject.txt"
-    
-    try:
-        s3_client.put_object(Bucket=bucket_name, Key=object_key, Body='42')
-        s3_client.get_object(Bucket=bucket_name, Key=object_key)
-        s3_client.delete_object(Bucket=bucket_name, Key=object_key)
-        pytest.fail("Error not raised")
-    except ClientError as e:
-        assert e.response['Error']['Code'] == expected_output
+# Asserting if the owner has permissions blocked from own bucket
+def test_denied_policy_operations_by_owner(s3_client, bucket_with_one_object_policy, boto3_action):
+
+    bucket_name, object_key = bucket_with_one_object_policy
+
+    kwargs = {
+        'Bucket': bucket_name,  # Set 'Bucket' value from the variable
+        'Key': object_key
+    }
+
+    #PutObject needs another variable
+    if boto3_action == 'put_object' :
+        kwargs['Body'] = 'The answer for everthong is 42'
+        
+    #retrieve the method passed as argument
+    method = getattr(s3_client, boto3_action)
+    assert method(**kwargs)
 
