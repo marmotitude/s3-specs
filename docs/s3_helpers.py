@@ -187,3 +187,12 @@ def delete_version(s3_client, bucket_name, version, lock_mode):
                 f"Failed to delete version {version_id} of object {version['Key']} in bucket {bucket_name}: {e}"
             )
 
+
+def change_policies_json(Bucket, policy_dict, actions, effect = 'Allow'):
+    #change arguments inside of the policy dict
+    policy_dict["Statement"][0]["Resource"] = Bucket + "/*"
+    policy_dict["Statement"][0]["Action"] = actions
+    policy_dict["Statement"][0]["Effect"] = effect
+    return json.dumps(policy_dict)
+
+

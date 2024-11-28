@@ -13,6 +13,7 @@ from s3_helpers import (
     put_object_and_wait,
     cleanup_old_buckets,
     get_spec_path,
+    change_policies_json,
 )
 from datetime import datetime, timedelta
 from botocore.exceptions import ClientError
@@ -263,3 +264,46 @@ def bucket_with_lock_and_object(s3_client, bucket_with_lock):
 
     # Return bucket name, object key, and version ID
     return bucket_name, object_key, object_version
+
+@pytest.fixture
+def bucket_with_one_object_acl(s3_client, bucket_with_one_object, request):
+    """
+    Prepares an S3 bucket with object and defines its obejct acl.
+
+    :param s3_client: boto3 S3 client fixture.
+    :param bucket_with_one_object: Name of the bucket with versioning and object locking enabled.
+    :return: Tuple of (bucket_name, object_key, object_version).
+    """
+    
+    bucket_name = "object_acl"
+    #Create one bucket with an object
+    bucket_name, object_key, url = bucket_with_one_object
+    
+    s3_client.put_object_acl(Bucket=bucket_name, ACL = request.param, Key= object_key)
+    
+    # Yield the bucket name and object key to the test
+    yield bucket_name, object_key, url
+    
+    
+@pytest.fixture
+def bucket_with_policy(s3_client, existing_bucket_name, request):
+    """
+    Prepares an S3 bucket with object and defines its obejct acl.
+
+    :param s3_client: boto3 S3 client fixture.
+    :param existing_bucket_name: Name of the bucket after its creating on the fixture of same name.
+    :param request: dictionary of policy related arguments
+    :return: bucket_name.
+    """
+    
+    
+    bucket_name = "bucket_policy"
+    #Create one bucket with an object
+    bucket_name = existing_bucket_name
+    
+    policy = change_policies_json(Bucket=bucket_name, policy_dict= request.param['policy_dict'], actions= request.param['actions'], effect=request.param['effect'])
+    
+    s3_client.put_bucket_policy(Bucket=bucket_name, Policy = policy)
+    
+    # Yield the bucket name and object key to the test
+    yield bucket_name
