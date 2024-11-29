@@ -103,8 +103,7 @@ def delete_policy_and_bucket_and_wait(s3_client, bucket_name, request):
                 break
             else:
                 time.sleep(sleeptime)
-                continue
-        
+                continue 
            
     delete_all_objects_and_wait(s3_client, bucket_name)
     delete_bucket_and_wait(s3_client, bucket_name)

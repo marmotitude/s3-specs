@@ -1,4 +1,5 @@
 import pytest
+import logging
 from botocore.exceptions import ClientError
 from s3_helpers import(
     change_policies_json,
@@ -89,6 +90,7 @@ def test_setup_policies(s3_client, existing_bucket_name, policies_args):
     policies = change_policies_json(existing_bucket_name, policies_args)
     assert s3_client.put_bucket_policy(Bucket=bucket_name, Policy=policies)
 
+# # Tests related to actions on the bucket
     
 @pytest.mark.parametrize('bucket_with_one_object_policy, boto3_action', [
     ({"policy_dict": policy_dict, "actions": "s3:PutObject", "effect": "Deny"}, 'put_object'),
@@ -98,6 +100,34 @@ def test_setup_policies(s3_client, existing_bucket_name, policies_args):
 
 # ## Asserting if the owner has permissions blocked from own bucket
 def test_denied_policy_operations_by_owner(s3_client, bucket_with_one_object_policy, boto3_action):
+    bucket_name, object_key = bucket_with_one_object_policy
+    kwargs = {
+        'Bucket': bucket_name,  # Set 'Bucket' value from the variable
+        'Key': object_key
+    }
+
+    #PutObject needs another variable
+    if boto3_action == 'put_object' :
+        kwargs['Body'] = 'The answer for everthong is 42'
+        
+    #retrieve the method passed as argument
+    method = getattr(s3_client, boto3_action)
+    try:
+        method(**kwargs)
+        logging.info(method)
+        pytest.fail("Expected exception not raised")
+    except ClientError as e:
+        assert e.response['Error']['Code'] == 'AccessDeniedByBucketPolicy'
+
+
+@pytest.mark.parametrize('bucket_with_one_object_policy, boto3_action', [
+    ({"policy_dict": policy_dict, "actions": "s3:PutObject", "effect": "Allow"}, 'put_object'),
+    ({"policy_dict": policy_dict, "actions": "s3:GetObject", "effect": "Allow"}, 'get_object'),
+    ({"policy_dict": policy_dict, "actions": "s3:DeleteObject", "effect": "Allow"}, 'delete_object')
+], indirect = ['bucket_with_one_object_policy'])
+
+# ## Asserting if the owner has permissions blocked from own bucket
+def test_allow_policy_operations_by_owner(s3_client, bucket_with_one_object_policy, boto3_action):
 
     bucket_name, object_key = bucket_with_one_object_policy
 
@@ -113,4 +143,5 @@ def test_denied_policy_operations_by_owner(s3_client, bucket_with_one_object_pol
     #retrieve the method passed as argument
     method = getattr(s3_client, boto3_action)
     assert method(**kwargs)
+
 
