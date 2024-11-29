@@ -15,7 +15,7 @@ from s3_helpers import (
     get_spec_path,
     change_policies_json,
     delete_all_objects_and_wait,
-    delete_policy_and_bucket,
+    delete_policy_and_bucket_and_wait,
 )
 from datetime import datetime, timedelta
 from botocore.exceptions import ClientError
@@ -180,7 +180,6 @@ def bucket_with_one_object_and_lock_enabled(s3_client, lock_mode, versioned_buck
     # Yield details to tests
     yield bucket_name, object_key, object_version
 
-
 @pytest.fixture
 def lockeable_bucket_name(s3_client, lock_mode):
     """
@@ -267,11 +266,10 @@ def bucket_with_lock_and_object(s3_client, bucket_with_lock):
     # Return bucket name, object key, and version ID
     return bucket_name, object_key, object_version
     
-    
 @pytest.fixture
 def bucket_with_one_object_policy(s3_client, request):
     """
-    Prepares an S3 bucket with object and defines its obejct acl.
+    Prepares an S3 bucket with object and defines its object policies.
 
     :param s3_client: boto3 S3 client fixture.
     :param existing_bucket_name: Name of the bucket after its creating on the fixture of same name.
@@ -293,6 +291,4 @@ def bucket_with_one_object_policy(s3_client, request):
     yield bucket_name, object_key
     
     # Teardown: delete the bucket after the test
-    delete_policy_and_bucket(s3_client, bucket_name)
-    delete_all_objects_and_wait(s3_client, bucket_name)
-    cleanup_old_buckets(s3_client, bucket_name, retention_days=0)    
+    delete_policy_and_bucket_and_wait(s3_client, bucket_name, request)

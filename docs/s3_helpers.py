@@ -89,21 +89,25 @@ def delete_all_objects_and_wait(s3_client, bucket_name):
     if 'Contents' in response:
         for obj in response['Contents']:
             delete_object_and_wait(s3_client, bucket_name, obj['Key'])
-
-
-def delete_policy_and_bucket(s3_client, bucket_name):
-    
-    
-    for _ in range(4):
+ 
+def delete_policy_and_bucket_and_wait(s3_client, bucket_name, request):
+    retries = 3
+    sleeptime = 1
+    for _ in range(retries):   
         try:
+            change_policies_json(bucket_name, {"policy_dict": request.param['policy_dict'], "actions": "s3:ListObjects", "effect": "Deny"})
             s3_client.delete_bucket_policy(Bucket=bucket_name)
-        except s3_client.exceptions.NoSuchBucketPolicy:
-            logging.info("Bucket policy already deleted or not found.")
-            return
-        time.sleep(2)
-
-
-    logging.info(f"Policy for bucket '{bucket_name}' confirmed as deleted.")
+        except s3_client.exceptions.ClientError as e:
+            if e.response['Error']['Code'] == 'NoSuchBucketPolicy':
+                logging.info(f"No policy found for bucket '{bucket_name}'.")
+                break
+            else:
+                time.sleep(sleeptime)
+                continue
+        
+           
+    delete_all_objects_and_wait(s3_client, bucket_name)
+    delete_bucket_and_wait(s3_client, bucket_name)
 
 def put_object_and_wait(s3_client, bucket_name, object_key, content):
     """

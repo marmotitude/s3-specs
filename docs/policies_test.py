@@ -2,12 +2,11 @@ import pytest
 from botocore.exceptions import ClientError
 from s3_helpers import(
     change_policies_json,
-    put_object_and_wait,
-    delete_object_and_wait,
 )
 
+# # Policy Tests
 
-
+# ### Test Variables
 malformed_policy_json ='''{
     "Version": "2012-10-18",
     "Statement": [
@@ -67,7 +66,7 @@ cases = [
 
 @pytest.mark.parametrize('input, expected_error', cases)
 
-# Asserting the possible combinations that are allowed as policy arguments
+# ## Asserting the possible combinations that are allowed as policy arguments
 def test_put_invalid_bucket_policy(s3_client, existing_bucket_name, input, expected_error):
     try:
         s3_client.put_bucket_policy(Bucket=existing_bucket_name, Policy=input)
@@ -82,7 +81,7 @@ def test_put_invalid_bucket_policy(s3_client, existing_bucket_name, input, expec
     {"policy_dict": policy_dict, "actions": "s3:GetObject", "effect": "Deny"},
     {"policy_dict": policy_dict, "actions": "s3:DeleteObject", "effect": "Deny"}
 ])
-
+# ## Base case of putting a policy into a bcuket
 def test_setup_policies(s3_client, existing_bucket_name, policies_args):
     bucket_name = existing_bucket_name
 
@@ -97,7 +96,7 @@ def test_setup_policies(s3_client, existing_bucket_name, policies_args):
     ({"policy_dict": policy_dict, "actions": "s3:DeleteObject", "effect": "Deny"}, 'delete_object')
 ], indirect = ['bucket_with_one_object_policy'])
 
-# Asserting if the owner has permissions blocked from own bucket
+# ## Asserting if the owner has permissions blocked from own bucket
 def test_denied_policy_operations_by_owner(s3_client, bucket_with_one_object_policy, boto3_action):
 
     bucket_name, object_key = bucket_with_one_object_policy
