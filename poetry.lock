@@ -1633,6 +1633,20 @@ pytest = ">=8.3.3"
 testing = ["covdefaults (>=2.3)", "coverage (>=7.6.1)", "pytest-mock (>=3.14)"]
 
 [[package]]
+name = "pytest-repeat"
+version = "0.9.3"
+description = "pytest plugin for repeating tests"
+optional = false
+python-versions = ">=3.7"
+files = [
+    {file = "pytest_repeat-0.9.3-py3-none-any.whl", hash = "sha256:26ab2df18226af9d5ce441c858f273121e92ff55f5bb311d25755b8d7abdd8ed"},
+    {file = "pytest_repeat-0.9.3.tar.gz", hash = "sha256:ffd3836dfcd67bb270bec648b330e20be37d2966448c4148c4092d1e8aba8185"},
+]
+
+[package.dependencies]
+pytest = "*"
+
+[[package]]
 name = "pytest-rerunfailures"
 version = "15.0"
 description = "pytest plugin to re-run tests to eliminate flaky failures"
@@ -2360,4 +2374,4 @@ test = ["websockets"]
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.12"
-content-hash = "43a28957ed0e9aecde860696781b6c5347baddb31a3d1cec438afeecc1262007"
+content-hash = "66211ad1d86f94c75c1ca97648edd879a11699713dcde49932a68fff108ef43f"
