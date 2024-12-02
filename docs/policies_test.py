@@ -145,10 +145,6 @@ def test_allow_policy_operations_by_owner(s3_client, bucket_with_one_object_poli
 
 
 
-
-    
-    
-    
     
     
     

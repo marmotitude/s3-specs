@@ -15,13 +15,13 @@ policy_dict = {
 }
 
 
-# override s3_client fixture to return multiple clients
+# override s3_client fixture to return multiple clients in this file
 @pytest.fixture
 def s3_client(multiple_s3_clients):
     return multiple_s3_clients[0]
 
-tenant = {"MGC":["b39b111a-0264-43a8-ae01-c1bb15c8e259"]}
 
+tenant = {TENANT-ID}
 
 
 # Example of the list for actions, tenants, and methods
@@ -68,9 +68,6 @@ def test_denied_policy_operations(multiple_s3_clients, bucket_with_one_object_po
 
 
 
-
-
-
 @pytest.mark.parametrize(
     'bucket_with_one_object_policy, multiple_s3_clients, boto3_action',
     [
@@ -101,9 +98,5 @@ def test_allowed_policy_operations(multiple_s3_clients, bucket_with_one_object_p
         
     #retrieve the method passed as argument
     
-    try:
-        method = getattr(s3_clients_list[0], boto3_action)
-        method(**kwargs)
-        pytest.fail("Expected exception not raised")
-    except ClientError as e:
-        assert e.response['Error']['Code'] == 'AccessDeniedByBucketPolicy'
+    method = getattr(s3_clients_list[0], boto3_action)
+    assert method(**kwargs)
