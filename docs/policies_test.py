@@ -121,9 +121,9 @@ def test_denied_policy_operations_by_owner(s3_client, bucket_with_one_object_pol
 
 
 @pytest.mark.parametrize('bucket_with_one_object_policy, boto3_action', [
-    ({"policy_dict": policy_dict, "actions": "s3:PutObject", "effect": "Allow"}, 'put_object'),
-    ({"policy_dict": policy_dict, "actions": "s3:GetObject", "effect": "Allow"}, 'get_object'),
-    ({"policy_dict": policy_dict, "actions": "s3:DeleteObject", "effect": "Allow"}, 'delete_object')
+    ({"policy_dict": policy_dict, "actions": "s3:PutObject", "effect": "Allow", "Principal": "*"}, 'put_object'),
+    ({"policy_dict": policy_dict, "actions": "s3:GetObject", "effect": "Allow", "Principal": "*"}, 'get_object'),
+    ({"policy_dict": policy_dict, "actions": "s3:DeleteObject", "effect": "Allow", "Principal": "*"}, 'delete_object')
 ], indirect = ['bucket_with_one_object_policy'])
 
 # ## Asserting if the owner has permissions blocked from own bucket
@@ -144,4 +144,11 @@ def test_allow_policy_operations_by_owner(s3_client, bucket_with_one_object_poli
     assert method(**kwargs)
 
 
-# # Test with 2 or more profiles
+
+
+    
+    
+    
+    
+    
+    

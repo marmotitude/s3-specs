@@ -95,7 +95,7 @@ def delete_policy_and_bucket_and_wait(s3_client, bucket_name, request):
     sleeptime = 1
     for _ in range(retries):   
         try:
-            change_policies_json(bucket_name, {"policy_dict": request.param['policy_dict'], "actions": "s3:ListObjects", "effect": "Deny"})
+            change_policies_json(bucket_name, {"policy_dict": request.param['policy_dict'], "actions": ["s3:GetObjects", "*"], "effect": "Allow"})
             s3_client.delete_bucket_policy(Bucket=bucket_name)
         except s3_client.exceptions.ClientError as e:
             if e.response['Error']['Code'] == 'NoSuchBucketPolicy':
@@ -219,20 +219,21 @@ def change_policies_json(bucket, policy_args: dict) -> json:
     :param s3_client: Boto3 S3 client.
     :param bucket_name: Name of the bucket.
     :param version: The version or delete marker to delete.
-    :param lock_mode: Lock mode ('GOVERNANCE', 'COMPLIANCE', or None).
-    
+   
     """
     
     #parse the request
     policy = policy_args['policy_dict']
-    actions = policy_args['actions']
     effect = policy_args['effect']
+    principal = policy_args['actions'][1]
+    actions = policy_args['actions'][0]
     
     #change arguments inside of the policy dict
-    policy["Statement"][0]["Resource"] = bucket + "/*"
-    policy["Statement"][0]["Action"] = actions
     policy["Statement"][0]["Effect"] = effect
-    
+    policy["Statement"][0]["Principal"] = principal
+    policy["Statement"][0]["Action"] = actions
+    policy["Statement"][0]["Resource"] = bucket + "/*"
+        
     return json.dumps(policy)
 
 

@@ -14,7 +14,6 @@ from s3_helpers import (
     cleanup_old_buckets,
     get_spec_path,
     change_policies_json,
-    delete_all_objects_and_wait,
     delete_policy_and_bucket_and_wait,
 )
 from datetime import datetime, timedelta
@@ -281,6 +280,7 @@ def bucket_with_one_object_policy(s3_client, request):
     base_name = "policy-bucket"
     object_key = "PolicyObject.txt"
     bucket_name = generate_unique_bucket_name(base_name=base_name)
+    
     create_bucket_and_wait(s3_client, bucket_name)
     put_object_and_wait(s3_client, bucket_name, object_key, "42")    
     
@@ -292,3 +292,25 @@ def bucket_with_one_object_policy(s3_client, request):
     
     # Teardown: delete the bucket after the test
     delete_policy_and_bucket_and_wait(s3_client, bucket_name, request)
+
+
+
+@pytest.fixture
+def multiple_s3_clients(request):
+    """
+    Creates multiple S3 clients based on the profiles provided in the test parameters.
+
+    :param request: The pytest request object.
+    :return: A list of boto3 S3 client instances.
+    """
+    clients = []
+    try:
+        for profile in request.param["profiles"]:
+            session = boto3.Session(profile_name=profile)
+            clients.append(session.client("s3"))
+    except Exception as e:
+        pytest.fail(f"Failed to create multiple S3 clients: {e}")
+        
+    return clients
+    
+
