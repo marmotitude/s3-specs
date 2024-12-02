@@ -128,7 +128,6 @@ def test_denied_policy_operations_by_owner(s3_client, bucket_with_one_object_pol
 
 # ## Asserting if the owner has permissions blocked from own bucket
 def test_allow_policy_operations_by_owner(s3_client, bucket_with_one_object_policy, boto3_action):
-
     bucket_name, object_key = bucket_with_one_object_policy
 
     kwargs = {
@@ -145,3 +144,4 @@ def test_allow_policy_operations_by_owner(s3_client, bucket_with_one_object_poli
     assert method(**kwargs)
 
 
+# # Test with 2 or more profiles
