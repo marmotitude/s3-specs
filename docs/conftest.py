@@ -295,22 +295,31 @@ def bucket_with_one_object_policy(s3_client, request):
 
 
 
+
 @pytest.fixture
-def multiple_s3_clients(request):
+def multiple_s3_clients(request, test_params):
     """
     Creates multiple S3 clients based on the profiles provided in the test parameters.
 
     :param request: The pytest request object.
     :return: A list of boto3 S3 client instances.
     """
-    clients = []
-    try:
-        for profile in request.param["profiles"]:
-            session = boto3.Session(profile_name=profile)
-            clients.append(session.client("s3"))
-    except Exception as e:
-        pytest.fail(f"Failed to create multiple S3 clients: {e}")
-        
-    return clients
+    number_profiles = request.param["number_profiles"]
+    clients = [p for p in test_params["profiles"][:number_profiles]]
+    sessions = []
     
-
+    
+    for client in clients:
+        if "profile_name" in client:
+            session = boto3.Session(profile_name=client["profile_name"])
+        else:
+            session = boto3.Session(
+                region_name=client["region_name"],
+                aws_access_key_id=client["aws_access_key_id"],
+                aws_secret_access_key=client["aws_secret_access_key"],
+            )
+        sessions.append(session.client("s3", endpoint_url=client.get("endpoint_url")))
+        
+    return sessions
+    
+    
