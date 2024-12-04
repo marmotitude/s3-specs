@@ -301,7 +301,8 @@ def multiple_s3_clients(request, test_params):
     """
     Creates multiple S3 clients based on the profiles provided in the test parameters.
 
-    :param request: The pytest request object.
+    :param test_params: dictionary containing the profiles names.
+    :param request: dictionary that have number_profiles int.
     :return: A list of boto3 S3 client instances.
     """
     number_profiles = request.param["number_profiles"]

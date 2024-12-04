@@ -20,7 +20,7 @@ malformed_policy_json ='''{
     ]
 }'''
 
-typo_policy = """{
+wrong_date_policy = """{
     "Version": "2012-10-18",
     "Statement": [
         {
