@@ -48,14 +48,15 @@ methods_input = {
     #'put_bucket_acl': {"Bucket": 'my-bucket', "ACL": 'public-read'},
 }
 
-acl_permissions = ['private', 'public-read', 'public-read-write', 'authenticated-read']
+acl_permissions = ['private', 'public-read', 'public-read-write', 'authenticated-read', 'bucket-owner-read', 'bucket-owner-full-control', 'log-delivery-write']
+
 
 expected_results = {
-    'list_objects_v2': ['AccessDenied', 200, 200, 200],  
-    'put_object': ['AccessDenied', 'AccessDenied', 200, 'AccessDenied'],       
-    'get_object': ['AccessDenied', 'AccessDenied', 'AccessDenied', 'AccessDenied'],      
-    'get_bucket_acl': ['AccessDenied', 'AccessDenied', 'AccessDenied', 'AccessDenied'],   
-    #'put_bucket_acl': ['AccessDenied', 'AccessDenied', 'AccessDenied', 'AccessDenied'],   
+    'list_objects_v2': ['AccessDenied', 200, 200, 200, 'AccessDenied', 'AccessDenied', 'AccessDenied'],  
+    'put_object': ['AccessDenied', 'AccessDenied', 200, 'AccessDenied', 'AccessDenied', 'AccessDenied', 'AccessDenied'],       
+    'get_object': ['AccessDenied', 'AccessDenied', 'AccessDenied', 'AccessDenied', 'AccessDenied', 'AccessDenied', 'AccessDenied'],      
+    'get_bucket_acl': ['AccessDenied', 'AccessDenied', 'AccessDenied', 'AccessDenied', 'AccessDenied', 'AccessDenied', 'AccessDenied'],   
+    #'put_bucket_acl': ['AccessDenied', 'AccessDenied', 'AccessDenied', 'AccessDenied', 'AccessDenied', 'AccessDenied', 'AccessDenied'],   
 }
 
 

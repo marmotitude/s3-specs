@@ -5,19 +5,7 @@ from s3_helpers import (
     outer_merge
 )
 
-# Vars for the tests
-methods_input = {
-    'list_objects_v2': {"Bucket": 'my-bucket'}, 
-    'put_object': {"Bucket": 'my-bucket', "Key": 'my-key', "Body": 'content'},
-    'get_object': {"Bucket": 'my-bucket', "Key": 'my-key'},
-    'get_bucket_acl': {"Bucket": 'my-bucket'},
-    #'put_bucket_acl': {"Bucket": 'my-bucket', "ACL": 'public-read'},
-}
-
-acl_permissions = ['private', 'public-read', 'public-read-write', 'authenticated-read']
-
-
-#OBJECT ACL
+# # OBJECT ACL
 
 ## test invalid arguments for acl
 def test_invalid_put_object_acl(s3_client, existing_bucket_name, acl_name):
@@ -73,6 +61,18 @@ def test_get_object_acl(s3_client, bucket_with_one_object_acl):
 
 number_profiles = 2
 
+# Vars for the tests
+methods_input = {
+    'list_objects_v2': {"Bucket": 'my-bucket'}, 
+    'put_object': {"Bucket": 'my-bucket', "Key": 'my-key', "Body": 'content'},
+    'get_object': {"Bucket": 'my-bucket', "Key": 'my-key'},
+    'get_bucket_acl': {"Bucket": 'my-bucket'},
+    #'put_bucket_acl': {"Bucket": 'my-bucket', "ACL": 'public-read'},
+}
+
+acl_permissions = ['private', 'public-read', 'public-read-write', 'authenticated-read', 'bucket-owner-read', 'bucket-owner-full-control', 'log-delivery-write']
+
+
 expected_results = {
     'list_objects_v2': ['AccessDenied', 'AccessDenied', 'AccessDenied', 'AccessDenied'],  
     'put_object': ['AccessDenied', 'AccessDenied', 'AccessDenied', 'AccessDenied'],       
@@ -80,7 +80,7 @@ expected_results = {
     'get_bucket_acl': ['AccessDenied', 'AccessDenied', 'AccessDenied', 'AccessDenied'],   
     #'put_bucket_acl': ['AccessDenied', 'AccessDenied', 'AccessDenied', 'AccessDenied'],   
 }
-
+# private, public-read, write, read, read-acp, write-acp, full-controll
 @pytest.mark.parametrize(
     "multiple_s3_clients, acl_permission, method_args",
     [
@@ -127,12 +127,12 @@ def test_object_acl(multiple_s3_clients, bucket_with_one_object, acl_permission,
 
 
 expected_results = {
-    'list_objects_v2': ['AccessDenied', 'AccessDenied', 'AccessDenied', 'AccessDenied'] ,  
+    'list_objects_v2': ['AccessDenied', 'AccessDenied', 'AccessDenied', 'AccessDenied'],  
     'put_object': ['AccessDenied', 'AccessDenied', 'AccessDenied', 'AccessDenied'],       
-    'get_object': ['AccessDenied', 'AccessDenied', 'AccessDenied', 'AccessDenied'],      
+    'get_object': ['AccessDenied', 200, 200, 200],      
     'get_bucket_acl': ['AccessDenied', 'AccessDenied', 'AccessDenied', 'AccessDenied'],   
     #'put_bucket_acl': ['AccessDenied', 'AccessDenied', 'AccessDenied', 'AccessDenied'],   
-}   
+}
 
 @pytest.mark.parametrize(
     "multiple_s3_clients, acl_permission, method_args",
