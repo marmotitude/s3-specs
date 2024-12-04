@@ -322,34 +322,3 @@ def multiple_s3_clients(request, test_params):
         sessions.append(session.client("s3", endpoint_url=client.get("endpoint_url")))
         
     return sessions
-
-
-
-@pytest.fixture
-def bucket_with_acl_one_object(s3_client, request):
-    """
-    Prepares an S3 bucket with object and defines its object policies.
-
-    :param s3_client: boto3 S3 client fixture.
-    :param existing_bucket_name: Name of the bucket after its creating on the fixture of same name.
-    :param request: dictionary of policy related arguments
-    :return: bucket_name.
-    """
-        
-    # Generate a unique name and create a versioned bucket
-    base_name = "acl-bucket"
-    object_key = "aclBucket.txt"
-    bucket_name = generate_unique_bucket_name(base_name=base_name)
-    
-    create_bucket_and_wait(s3_client, bucket_name)
-    put_object_and_wait(s3_client, bucket_name, object_key, "42")    
-    
-    s3_client.put_bucket_acl(Bucket = bucket_name, ACL = request.param.get("acl"))
-    
-    # Yield the bucket name and object key to the test
-    yield bucket_name, object_key
-    
-    # Teardown: delete the bucket after the test
-    
-    delete_all_objects_and_wait(s3_client, bucket_name)
-    delete_bucket_and_wait(s3_client, bucket_name)

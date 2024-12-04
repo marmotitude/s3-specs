@@ -236,4 +236,10 @@ def change_policies_json(bucket, policy_args: dict) -> json:
         
     return json.dumps(policy)
 
-
+def outer_merge(a, b):
+    # Iterate through the keys in dictionary b
+    for key, value in b.items():
+        if key in a:
+            a[key] = value
+            
+    return a

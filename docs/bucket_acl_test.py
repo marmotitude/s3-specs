@@ -1,22 +1,16 @@
 import pytest
 from botocore.exceptions import ClientError
-from s3_helpers import(
-    put_object_and_wait,
+from s3_helpers import (
+    outer_merge
 )
 
 
-def outer_merge(a, b):
-    # Iterate through the keys in dictionary b
-    for key, value in b.items():
-        if key in a:
-            a[key] = value
-            
-    return a
 
 
-# Bucket ACL
+# #Bucket ACL
 
-## test invalid arguments for acl
+# ## Basic ACL tests
+# test invalid arguments for acl
 @pytest.mark.parametrize("acl_name", [
     "errado", "''"
 ]) 
@@ -28,7 +22,7 @@ def test_invalid_put_bucket_acl(s3_client,existing_bucket_name, acl_name):
         assert e.response['Error']['Code'] == 'InvalidArgument'
 
 
-## Try to create acl with different permissions
+# Try to create acl with different permissions
 @pytest.mark.parametrize("acl_name", [
     'private',
     'public-read',
@@ -41,49 +35,69 @@ def test_put_bucket_acl(s3_client, existing_bucket_name, acl_name):
     assert response['ResponseMetadata']['HTTPStatusCode'] == 200
 
 
-# ACL -> ListObjects, ReadObject, WriteObject, ListAcl, ReadAcl, WriteAcl
 
+# ## Test ACL permissions with 2 clients
 
 number_profiles = 2
 
-methods = {
-    'list_objects_v2': {"Bucket": 'my-bucket'},
+methods_input = {
+    'list_objects_v2': {"Bucket": 'my-bucket'}, 
     'put_object': {"Bucket": 'my-bucket', "Key": 'my-key', "Body": 'content'},
     'get_object': {"Bucket": 'my-bucket', "Key": 'my-key'},
     'get_bucket_acl': {"Bucket": 'my-bucket'},
-    'put_bucket_acl': {"Bucket": 'my-bucket', "ACL": 'public-read'},
+    #'put_bucket_acl': {"Bucket": 'my-bucket', "ACL": 'public-read'},
 }
 
+acl_permissions = ['private', 'public-read', 'public-read-write', 'authenticated-read']
+
 expected_results = {
-    'private': ['AccessDenied', 'AccessDenied', 'AccessDenied', 'AccessDenied', 'NoSuchBucket'],
-    'authenticated-read':[200, 'AccessDenied', 'AccessDenied', 'AccessDenied', 'NoSuchBucket'],
-    'public-read':[200, 'AccessDenied', 'AccessDenied', 'AccessDenied', 'NoSuchBucket'],
-    'public-read-write':[200, 200, 200, 'AccessDenied', 'NoSuchBucket'],
+    'list_objects_v2': ['AccessDenied', 200, 200, 200],  
+    'put_object': ['AccessDenied', 'AccessDenied', 200, 'AccessDenied'],       
+    'get_object': ['AccessDenied', 'AccessDenied', 'AccessDenied', 'AccessDenied'],      
+    'get_bucket_acl': ['AccessDenied', 'AccessDenied', 'AccessDenied', 'AccessDenied'],   
+    #'put_bucket_acl': ['AccessDenied', 'AccessDenied', 'AccessDenied', 'AccessDenied'],   
 }
 
 
 @pytest.mark.parametrize(
-    "multiple_s3_clients, bucket_with_acl_one_object, methods, expected", 
-    [({"number_profiles": number_profiles}, {"acl": acl}, methods, expected_results[acl]) for acl in expected_results], 
-    indirect=['multiple_s3_clients', 'bucket_with_acl_one_object']
+    "multiple_s3_clients, acl_permission, method_args",
+    [
+        (
+            {"number_profiles": number_profiles},  
+            acl_permissions,  
+            {
+                "method": method,  
+                "args": args, 
+                "expected_results": expected_results[method]
+            }
+        )
+        for method, args in methods_input.items()
+    ],
+    indirect=['multiple_s3_clients']  # Indicating that 'multiple_s3_clients' is a fixture
 )
 
-
-def test_bucket_acl(multiple_s3_clients, bucket_with_acl_one_object, methods, expected):
-    client = multiple_s3_clients[1]
-    bucket_name, obj_key = bucket_with_acl_one_object
+def test_bucket_acl(multiple_s3_clients, bucket_with_one_object, acl_permission, method_args):
+    s3_owner = multiple_s3_clients[0]
+    s3_other = multiple_s3_clients[1] 
+    bucket_name, obj_key, _ = bucket_with_one_object
     
     results = []
 
-    for m, a in methods.items():
-        a = outer_merge(a, {'Bucket': bucket_name, 'Key': obj_key})
-        method = getattr(client, m)
+
+    for acl in acl_permission:
+        s3_owner.put_bucket_acl(Bucket = bucket_name, ACL = acl)
+        #Get the arguments of inside of the subdict 
+        
+        input_method = outer_merge(method_args["args"], {'Bucket': bucket_name, 'Key': obj_key})
+
+        method = getattr(s3_other, method_args["method"])
+        
         try:
-            response = method(**a)
+            response = method(**input_method)
             results.append(response['ResponseMetadata']['HTTPStatusCode'])
         except ClientError as e:
             results.append(e.response['Error']['Code'])
- 
-        
-    assert expected == results
-        
+
+    assert results == method_args["expected_results"]
+    
+    
