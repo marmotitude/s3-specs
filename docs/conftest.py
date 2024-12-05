@@ -272,7 +272,7 @@ def bucket_with_one_object_policy(s3_client, request):
 
     :param s3_client: boto3 S3 client fixture.
     :param existing_bucket_name: Name of the bucket after its creating on the fixture of same name.
-    :param request: dictionary of policy related arguments
+    :param request: dictionary of policy expecting the helper function change_policies_json.
     :return: bucket_name.
     """
         

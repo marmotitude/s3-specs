@@ -20,7 +20,7 @@ malformed_policy_json ='''{
     ]
 }'''
 
-wrong_date_policy = """{
+misspeled_policy = """{
     "Version": "2012-10-18",
     "Statement": [
         {
@@ -34,7 +34,7 @@ wrong_date_policy = """{
 }
 """
 
-wrong_date_policy = """{
+wrong_version_policy = """{
     "Version": "2012-10-18",
     "Statement": 
         {
@@ -61,7 +61,7 @@ policy_dict = {
 
 
 cases = [
-    *[(case, "MalformedJSON") for case in ['', 'jason',"''", typo_policy, wrong_date_policy]],
+    *[(case, "MalformedJSON") for case in ['', 'jason',"''", misspeled_policy, wrong_version_policy]],
     *[(case, "MalformedPolicy") for case in ['{}','""', malformed_policy_json]],
  ]   
 
