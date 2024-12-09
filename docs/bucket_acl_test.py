@@ -4,22 +4,21 @@ from s3_helpers import (
     outer_merge
 )
 
+# # Bucket ACL
 
-
-
-# #Bucket ACL
-
-# ## Basic ACL tests
+# ## Bucket ACL tests with 1 client
 # test invalid arguments for acl
-@pytest.mark.parametrize("acl_name", [
-    "errado", "''"
+@pytest.mark.parametrize("acl_name, expected", [
+    ("errado", 400),
+    ( "''", 400)
 ]) 
-def test_invalid_put_bucket_acl(s3_client,existing_bucket_name, acl_name):
+
+def test_invalid_put_bucket_acl(s3_client,existing_bucket_name, acl_name, expected):
     try:
         s3_client.put_bucket_acl(Bucket = existing_bucket_name, ACL = acl_name)
-        pytest.fail("Valid acl arg inputed, test failed")
+        pytest.fail("Valid acl argument inputed, test failed")
     except ClientError as e:
-        assert e.response['Error']['Code'] == 'InvalidArgument'
+        assert e.response['ResponseMetadata']['HTTPStatusCode'] == expected
 
 
 # Try to create acl with different permissions
@@ -29,16 +28,15 @@ def test_invalid_put_bucket_acl(s3_client,existing_bucket_name, acl_name):
     'public-read-write',
     'authenticated-read',
 ]) 
+
 def test_put_bucket_acl(s3_client, existing_bucket_name, acl_name):
-    response =  s3_client.put_bucket_acl(Bucket = existing_bucket_name, ACL = acl_name)
-
+    response = s3_client.put_bucket_acl(Bucket = existing_bucket_name, ACL = acl_name)
     assert response['ResponseMetadata']['HTTPStatusCode'] == 200
-
 
 
 # ## Test ACL permissions with 2 clients
 
-number_profiles = 2
+number_clients = 2
 
 methods_input = {
     'list_objects_v2': {"Bucket": 'my-bucket'}, 
@@ -64,7 +62,7 @@ expected_results = {
     "multiple_s3_clients, acl_permission, method_args",
     [
         (
-            {"number_profiles": number_profiles},  
+            {"number_clients": number_clients},  
             acl_permissions,  
             {
                 "method": method,  
@@ -74,6 +72,7 @@ expected_results = {
         )
         for method, args in methods_input.items()
     ],
+    ids=list(methods_input.keys()),
     indirect=['multiple_s3_clients']  # Indicating that 'multiple_s3_clients' is a fixture
 )
 

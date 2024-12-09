@@ -7,15 +7,6 @@ from s3_helpers import (
 
 # # OBJECT ACL
 
-## test invalid arguments for acl
-def test_invalid_put_object_acl(s3_client, existing_bucket_name, acl_name):
-    try:
-        s3_client.put_bucket_acl(Bucket = existing_bucket_name, ACL = acl_name)
-        pytest.fail("Valid acl arg inputed, test failed")
-    except ClientError as e:
-        assert e.response['Error']['Code'] == 'InvalidArgument'
-
-
 ## Try to set object acl with invalid permissions
 @pytest.mark.parametrize("acl_name", ['batata','""',]) 
 def test_invalid_put_object_acl(s3_client, bucket_with_one_object, acl_name):
@@ -34,6 +25,7 @@ def test_invalid_put_object_acl(s3_client, bucket_with_one_object, acl_name):
     'public-read-write',
     'authenticated-read',
 ]) 
+
 def test_put_object_acl(s3_client, bucket_with_one_object, acl_name):
     bucket_name, object_key, _ = bucket_with_one_object
     response =  s3_client.put_object_acl(Bucket = bucket_name, ACL = acl_name, Key = object_key)
@@ -42,16 +34,23 @@ def test_put_object_acl(s3_client, bucket_with_one_object, acl_name):
 
 
 ## Test the creater profile always has FULL CONTROL of the objects with acl
-@pytest.mark.parametrize("bucket_with_one_object_acl", [
-    'private',
-    'public-read',
-    'public-read-write',
-    'authenticated-read',
-], indirect=True) 
-def test_get_object_acl(s3_client, bucket_with_one_object_acl):
+@pytest.mark.parametrize("multiple_s3_clients, acl", [
+    ({"number_clients": 1},'private'),
+    ({"number_clients": 1},'public-read'),
+    ({"number_clients": 1},'public-read-write'),
+    ({"number_clients": 1},'authenticated-read')
+], indirect=["multiple_s3_clients"]) 
 
-    bucket, key, _ = bucket_with_one_object_acl
-    response = s3_client.get_object_acl(Bucket=bucket, Key=key)
+def test_owner_get_object_acl(multiple_s3_clients, bucket_with_one_object, acl):
+
+    s3_owner = multiple_s3_clients[0]
+    bucket_name, obj_key, _ = bucket_with_one_object
+    
+    s3_owner.put_object_acl(Bucket = bucket_name, ACL = acl, Key=obj_key)
+
+
+    bucket, key, _ = bucket_with_one_object
+    response = s3_owner.get_object_acl(Bucket=bucket, Key=key)
 
     assert any([g['Permission'] == "FULL_CONTROL" for g in response['Grants']])
 
@@ -59,33 +58,31 @@ def test_get_object_acl(s3_client, bucket_with_one_object_acl):
 
 # # Multiple clients tests
 
-number_profiles = 2
+number_clients = 2
 
 # Vars for the tests
 methods_input = {
     'list_objects_v2': {"Bucket": 'my-bucket'}, 
     'put_object': {"Bucket": 'my-bucket', "Key": 'my-key', "Body": 'content'},
     'get_object': {"Bucket": 'my-bucket', "Key": 'my-key'},
-    'get_bucket_acl': {"Bucket": 'my-bucket'},
-    #'put_bucket_acl': {"Bucket": 'my-bucket', "ACL": 'public-read'},
+    'get_object_acl': {"Bucket": 'my-bucket', "Key": 'my-key'},
 }
 
 acl_permissions = ['private', 'public-read', 'public-read-write', 'authenticated-read', 'bucket-owner-read', 'bucket-owner-full-control', 'log-delivery-write']
 
 
 expected_results = {
-    'list_objects_v2': ['AccessDenied', 'AccessDenied', 'AccessDenied', 'AccessDenied'],  
-    'put_object': ['AccessDenied', 'AccessDenied', 'AccessDenied', 'AccessDenied'],       
-    'get_object': ['AccessDenied', 200, 200, 200],      
-    'get_bucket_acl': ['AccessDenied', 'AccessDenied', 'AccessDenied', 'AccessDenied'],   
-    #'put_bucket_acl': ['AccessDenied', 'AccessDenied', 'AccessDenied', 'AccessDenied'],   
+    'list_objects_v2': ['AccessDenied', 'AccessDenied', 'AccessDenied', 'AccessDenied', 'AccessDenied', 'AccessDenied', 'AccessDenied'],  
+    'put_object': ['AccessDenied', 'AccessDenied', 'AccessDenied', 'AccessDenied', 'AccessDenied', 'AccessDenied', 'AccessDenied'],       
+    'get_object': ['AccessDenied', 200, 200, 200, 'AccessDenied', 'AccessDenied', 'AccessDenied'],      
+    'get_object_acl': ['AccessDenied', 'AccessDenied', 'AccessDenied', 'AccessDenied', 'AccessDenied', 'AccessDenied', 'AccessDenied'],   
 }
-# private, public-read, write, read, read-acp, write-acp, full-controll
+
 @pytest.mark.parametrize(
     "multiple_s3_clients, acl_permission, method_args",
     [
         (
-            {"number_profiles": number_profiles},  
+            {"number_clients": number_clients},  
             acl_permissions,  
             {
                 "method": method,  
@@ -95,24 +92,25 @@ expected_results = {
         )
         for method, args in methods_input.items()
     ],
+    ids=list(methods_input.keys()),
     indirect=['multiple_s3_clients']  # Indicating that 'multiple_s3_clients' is a fixture
 )
 
 
 def test_object_acl(multiple_s3_clients, bucket_with_one_object, acl_permission, method_args):
     s3_owner = multiple_s3_clients[0]
-    s3_other = multiple_s3_clients[1] 
+    s3_guest= multiple_s3_clients[1] 
     bucket_name, obj_key, _ = bucket_with_one_object
     
     results = []
 
     for acl in acl_permission:
         s3_owner.put_object_acl(Bucket = bucket_name, ACL = acl, Key=obj_key)
-        #Get the arguments of inside of the subdict 
-        
+
+        # Put the arguments of inside of the subdict for each method
         input_method = outer_merge(method_args["args"], {'Bucket': bucket_name, 'Key': obj_key})
 
-        method = getattr(s3_other, method_args["method"])
+        method = getattr(s3_guest, method_args["method"])
         
         try:
             response = method(**input_method)
@@ -127,18 +125,17 @@ def test_object_acl(multiple_s3_clients, bucket_with_one_object, acl_permission,
 
 
 expected_results = {
-    'list_objects_v2': ['AccessDenied', 'AccessDenied', 'AccessDenied', 'AccessDenied'],  
-    'put_object': ['AccessDenied', 'AccessDenied', 'AccessDenied', 'AccessDenied'],       
-    'get_object': ['AccessDenied', 200, 200, 200],      
-    'get_bucket_acl': ['AccessDenied', 'AccessDenied', 'AccessDenied', 'AccessDenied'],   
-    #'put_bucket_acl': ['AccessDenied', 'AccessDenied', 'AccessDenied', 'AccessDenied'],   
+    'list_objects_v2': ['AccessDenied', 'AccessDenied', 'AccessDenied', 'AccessDenied', 'AccessDenied', 'AccessDenied', 'AccessDenied'],  
+    'put_object': ['AccessDenied', 'AccessDenied', 'AccessDenied', 'AccessDenied', 'AccessDenied', 'AccessDenied', 'AccessDenied'],       
+    'get_object': ['AccessDenied', 'AccessDenied', 'AccessDenied', 'AccessDenied', 'AccessDenied', 'AccessDenied', 'AccessDenied'],      
+    'get_object_acl': ['AccessDenied', 'AccessDenied', 'AccessDenied', 'AccessDenied', 'AccessDenied', 'AccessDenied', 'AccessDenied'],   
 }
 
 @pytest.mark.parametrize(
     "multiple_s3_clients, acl_permission, method_args",
     [
         (
-            {"number_profiles": number_profiles},  
+            {"number_clients": number_clients},  
             acl_permissions,  
             {
                 "method": method,  
@@ -148,19 +145,19 @@ expected_results = {
         )
         for method, args in methods_input.items()
     ],
+    ids=list(methods_input.keys()),
     indirect=['multiple_s3_clients']  # Indicating that 'multiple_s3_clients' is a fixture
 )
     
-# ## Create 1 object with acl and another without acl and test the behavior of the functions
-def test_2_object_acl(multiple_s3_clients, bucket_with_one_object, acl_permission, method_args):
+# ## Create 1 object with acl and anguestwithout acl and test the behavior of the functions
+def test_2_clients_object_acl(multiple_s3_clients, bucket_with_one_object, acl_permission, method_args):
     s3_owner = multiple_s3_clients[0]
-    s3_other = multiple_s3_clients[1] 
+    s3_guest= multiple_s3_clients[1] 
     
     bucket_name, obj_key, _ = bucket_with_one_object
     obj_key_2 = obj_key + '2'
     content = 'this is the second object'
 
-    #put another object to test the behavior of the fucntions when trying to access the regular one and one with acl, when both exists
     put_object_and_wait(s3_owner, bucket_name, obj_key_2, content)
     
     results = []
@@ -171,7 +168,7 @@ def test_2_object_acl(multiple_s3_clients, bucket_with_one_object, acl_permissio
         
         input_method = outer_merge(method_args["args"], {'Bucket': bucket_name, 'Key': obj_key_2})
 
-        method = getattr(s3_other, method_args["method"])
+        method = getattr(s3_guest, method_args["method"])
         
         try:
             response = method(**input_method)

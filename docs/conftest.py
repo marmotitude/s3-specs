@@ -399,6 +399,7 @@ def multiple_s3_clients(request, test_params):
     :param request: dictionary that have number_clients int.
     :return: A list of boto3 S3 client instances.
     """
+    
     number_clients = request.param["number_clients"]
     clients = [p for p in test_params["profiles"][:number_clients]]
     sessions = []
