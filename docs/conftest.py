@@ -16,6 +16,9 @@ from s3_helpers import (
     get_spec_path,
     change_policies_json,
     delete_policy_and_bucket_and_wait,
+    get_tenants,
+    change_policies_json,
+    delete_policy_and_bucket_and_wait,
 )
 from datetime import datetime, timedelta
 from botocore.exceptions import ClientError
@@ -110,10 +113,80 @@ def existing_bucket_name(s3_client):
 
     # Yield the existing bucket name to the test
     yield bucket_name
+    
+    objects = s3_client.list_objects(Bucket=bucket_name).get("Contents", [])
 
+    if objects:
+        for obj in objects:
+            s3_client.delete_object(Bucket=bucket_name, Key=obj["Key"])
+    
     # Teardown: delete the bucket after the test
     delete_bucket_and_wait(s3_client, bucket_name)
+    
+@pytest.fixture
+def create_multipart_object_files():
+    object_key = "multipart_file.txt"
 
+    body = b"A" * 10 * 1024 * 514  # 50 MB
+
+    # Dividindo o dado em 2 partes
+    total_size = len(body)  # Tamanho total em bytes
+    part_sizes = [total_size, 1]
+    # Criar as partes diretamente em memória
+    part_bytes = []
+    start = 0
+    for size in part_sizes:
+        part_bytes.append(body[start:start + size])
+        start += size
+    
+    yield object_key, body, part_bytes
+
+@pytest.fixture
+def create_big_file_with_two_parts():
+    object_key = "large_file.txt"
+    with open(object_key, "w") as f:
+        f.write("A" * 10 * 1024 * 1024 * 5)
+
+    # Dividindo o arquivo em 2 partes
+    total_size = 10 * 1024 * 1024 * 5  # Tamanho total em bytes (50 MB)
+    part_sizes = [total_size // 2] * 2  # Cada parte terá metade do tamanho
+
+    # Se o tamanho total não for divisível por 2, ajusta a última parte
+    part_sizes[-1] += total_size % 2
+
+    part_files = []
+    with open(object_key, "r") as f:
+        for i, size in enumerate(part_sizes):
+            part_path = f"{object_key.split('.')[0]}_part_{i+1}.txt"
+            with open(part_path, "w") as part_file:
+                part_file.write(f.read(size))
+            part_files.append(part_path)
+    
+    yield object_key, part_files
+
+    os.remove(object_key)
+
+    for i in range(2):
+        os.remove(f"{object_key.split('.')[0]}_part_{i+1}.txt")
+
+
+@pytest.fixture
+def bucket_with_one_object_and_cold_storage_class(s3_client):
+    # Generate a unique bucket name and ensure it exists
+    bucket_name = generate_unique_bucket_name(base_name="fixture-bucket")
+    create_bucket_and_wait(s3_client, bucket_name)
+
+    # Define the object key and content, then upload the object
+    object_key = "test-object.txt"
+    content = b"Sample content for testing presigned URLs."
+    put_object_and_wait(s3_client, bucket_name, object_key, content, storage_class="GLACIER_IR")
+
+    # Yield the bucket name and object details to the test
+    yield bucket_name, object_key, content
+
+    # Teardown: Delete the object and bucket after the test
+    delete_object_and_wait(s3_client, bucket_name, object_key)
+    delete_bucket_and_wait(s3_client, bucket_name)
 @pytest.fixture
 def bucket_with_one_object(s3_client):
     # Generate a unique bucket name and ensure it exists
@@ -131,6 +204,22 @@ def bucket_with_one_object(s3_client):
     # Teardown: Delete the object and bucket after the test
     delete_object_and_wait(s3_client, bucket_name, object_key)
     delete_bucket_and_wait(s3_client, bucket_name)
+
+@pytest.fixture
+def bucket_with_one_storage_class_cold_object(s3_client, bucket_with_one_object):
+    # Generate a unique bucket name and ensure it exists
+    bucket_name, object_key, content = bucket_with_one_object
+
+    s3_client.copy_object(
+        Bucket = bucket_name,
+        CopySource=f"{bucket_name}/{object_key}",
+        Key = object_key,
+        StorageClass="GLACIER_IR"
+    )
+
+    # Yield the bucket name and object details to the test
+    yield bucket_name, object_key, content
+
 
 @pytest.fixture
 def versioned_bucket_with_one_object(s3_client, lock_mode):
@@ -267,32 +356,36 @@ def bucket_with_lock_and_object(s3_client, bucket_with_lock):
     return bucket_name, object_key, object_version
     
 @pytest.fixture
-def bucket_with_one_object_policy(s3_client, request):
+def bucket_with_one_object_policy(multiple_s3_clients, request):
     """
     Prepares an S3 bucket with object and defines its object policies.
 
     :param s3_client: boto3 S3 client fixture.
     :param existing_bucket_name: Name of the bucket after its creating on the fixture of same name.
-    :param request: dictionary of policy related arguments
+    :param request: dictionary of policy expecting the helper function change_policies_json.
     :return: bucket_name.
     """
+        
+    client = multiple_s3_clients[0]
         
     # Generate a unique name and create a versioned bucket
     base_name = "policy-bucket"
     object_key = "PolicyObject.txt"
     bucket_name = generate_unique_bucket_name(base_name=base_name)
     
-    create_bucket_and_wait(s3_client, bucket_name)
-    put_object_and_wait(s3_client, bucket_name, object_key, "42")    
+    create_bucket_and_wait(client, bucket_name)
+    put_object_and_wait(client, bucket_name, object_key, "42")    
     
-    policy = change_policies_json(bucket=bucket_name, policy_args=request.param)
-    s3_client.put_bucket_policy(Bucket=bucket_name, Policy = policy)
+    tenants = get_tenants(multiple_s3_clients)
+    
+    policy = change_policies_json(bucket=bucket_name, policy_args=request.param, tenants=tenants)
+    client.put_bucket_policy(Bucket=bucket_name, Policy = policy)
     
     # Yield the bucket name and object key to the test
     yield bucket_name, object_key
     
     # Teardown: delete the bucket after the test
-    delete_policy_and_bucket_and_wait(s3_client, bucket_name, request)
+    delete_policy_and_bucket_and_wait(client, bucket_name, request)
 
 
 
@@ -302,11 +395,12 @@ def multiple_s3_clients(request, test_params):
     """
     Creates multiple S3 clients based on the profiles provided in the test parameters.
 
-    :param request: The pytest request object.
+    :param test_params: dictionary containing the profiles names.
+    :param request: dictionary that have number_clients int.
     :return: A list of boto3 S3 client instances.
     """
-    number_profiles = request.param["number_profiles"]
-    clients = [p for p in test_params["profiles"][:number_profiles]]
+    number_clients = request.param["number_clients"]
+    clients = [p for p in test_params["profiles"][:number_clients]]
     sessions = []
     
     
@@ -322,3 +416,5 @@ def multiple_s3_clients(request, test_params):
         sessions.append(session.client("s3", endpoint_url=client.get("endpoint_url")))
         
     return sessions
+    
+    

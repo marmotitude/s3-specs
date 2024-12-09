@@ -40,6 +40,7 @@ def generate_unique_bucket_name(base_name="my-unique-bucket"):
     unique_id = uuid.uuid4().hex[:6]  # Short unique suffix
     return f"{base_name}-{unique_id}"
 
+
 def delete_bucket_and_wait(s3_client, bucket_name):
     try:
         s3_client.delete_bucket(Bucket=bucket_name)
@@ -95,7 +96,7 @@ def delete_policy_and_bucket_and_wait(s3_client, bucket_name, request):
     sleeptime = 1
     for _ in range(retries):   
         try:
-            change_policies_json(bucket_name, {"policy_dict": request.param['policy_dict'], "actions": ["s3:GetObjects", "*"], "effect": "Allow"})
+            change_policies_json(bucket_name, {"policy_dict": request.param['policy_dict'], "actions": ["s3:GetObjects", "*"], "effect": "Allow"}, tenants=["*"])
             s3_client.delete_bucket_policy(Bucket=bucket_name)
         except s3_client.exceptions.ClientError as e:
             if e.response['Error']['Code'] == 'NoSuchBucketPolicy':
@@ -116,6 +117,7 @@ def put_object_and_wait(s3_client, bucket_name, object_key, content):
     :param bucket_name: Name of the bucket
     :param object_key: Key (name) of the object
     :param content: Content of the object (bytes)
+    :param storage_class: Storage Class of the object, STANDARD by default 
     :return: Version ID of the object if versioning is enabled, otherwise None
     """
     # Upload the object
@@ -211,7 +213,7 @@ def delete_version(s3_client, bucket_name, version, lock_mode):
                 f"Failed to delete version {version_id} of object {version['Key']} in bucket {bucket_name}: {e}"
             )
 
-def change_policies_json(bucket, policy_args: dict) -> json:
+def change_policies_json(bucket, policy_args: dict, tenants: list) -> json:
     
     """
     From a policy changes its contest with the requested params and transform it into a JSON.
@@ -219,27 +221,38 @@ def change_policies_json(bucket, policy_args: dict) -> json:
     :param s3_client: Boto3 S3 client.
     :param bucket_name: Name of the bucket.
     :param version: The version or delete marker to delete.
+    :param filtered_tenants: Receives a list of tenants.
    
     """
     
     #parse the request
     policy = policy_args['policy_dict']
     effect = policy_args['effect']
-    principal = policy_args['actions'][1]
-    actions = policy_args['actions'][0]
+    actions = policy_args['actions']
     
     #change arguments inside of the policy dict
     policy["Statement"][0]["Effect"] = effect
-    policy["Statement"][0]["Principal"] = principal
+    policy["Statement"][0]["Principal"] = tenants
     policy["Statement"][0]["Action"] = actions
     policy["Statement"][0]["Resource"] = bucket + "/*"
         
     return json.dumps(policy)
 
-def outer_merge(a, b):
-    # Iterate through the keys in dictionary b
-    for key, value in b.items():
-        if key in a:
-            a[key] = value
-            
-    return a
+
+def get_tenants(multiple_s3_clients):
+    """
+    Get the tenant from the test_params and return a list of all client's tenants.
+
+    :param test_params: The test parameters.
+    :param client_number: The client number.
+    :return: The tenant for the client number.
+    """
+    bucket_list = []
+
+    for i, client in enumerate(multiple_s3_clients):        
+        id = client.list_buckets()
+        bucket_list.append(id['Owner']['ID'])
+        
+    return bucket_list
+    
+    
