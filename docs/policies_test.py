@@ -62,7 +62,7 @@ policy_dict = {
 
 cases = [
     *[(case, "MalformedJSON") for case in ['', 'jason',"''", misspeled_policy, wrong_version_policy]],
-    *[(case, "MalformedPolicy") for case in ['{}','""', malformed_policy_json]],
+    *[(case, "MalformedPolicy") for case in ['{}','""', malformed_policy_json]], 
  ]   
 
 @pytest.mark.parametrize('input, expected_error', cases)
@@ -81,7 +81,8 @@ def test_put_invalid_bucket_policy(s3_client, existing_bucket_name, input, expec
     {"policy_dict": policy_dict, "actions": "s3:PutObject", "effect": "Deny"},
     {"policy_dict": policy_dict, "actions": "s3:GetObject", "effect": "Deny"},
     {"policy_dict": policy_dict, "actions": "s3:DeleteObject", "effect": "Deny"}
-])
+], ids=['put_object', 'get_object', 'delete_object'])
+
 # ## Base case of putting a policy into a bcuket
 def test_setup_policies(s3_client, existing_bucket_name, policies_args):
     bucket_name = existing_bucket_name
@@ -99,7 +100,9 @@ number_clients = 2
     ({"number_clients": number_clients}, {"policy_dict": policy_dict, "actions": "s3:PutObject", "effect": "Deny"}, 'put_object'),
     ({"number_clients": number_clients}, {"policy_dict": policy_dict, "actions": "s3:GetObject", "effect": "Deny"}, 'get_object'),
     ({"number_clients": number_clients}, {"policy_dict": policy_dict, "actions": "s3:DeleteObject", "effect": "Deny"}, 'delete_object')
-], indirect = ['multiple_s3_clients', 'bucket_with_one_object_policy'])
+], 
+    ids = ['put_object', 'get_object', 'delete_object'],
+    indirect = ['multiple_s3_clients', 'bucket_with_one_object_policy'])
 
 # ## Asserting if the owner has permissions blocked from own bucket
 def test_denied_policy_operations_by_owner(s3_client, bucket_with_one_object_policy, boto3_action):
@@ -127,7 +130,9 @@ def test_denied_policy_operations_by_owner(s3_client, bucket_with_one_object_pol
     ({"number_clients": number_clients}, {"policy_dict": policy_dict, "actions": "s3:PutObject", "effect": "Allow", "Principal": "*"}, 'put_object', 200),
     ({"number_clients": number_clients}, {"policy_dict": policy_dict, "actions": "s3:GetObject", "effect": "Allow", "Principal": "*"}, 'get_object', 200),
     ({"number_clients": number_clients}, {"policy_dict": policy_dict, "actions": "s3:DeleteObject", "effect": "Allow", "Principal": "*"}, 'delete_object', 204)
-], indirect = ['multiple_s3_clients', 'bucket_with_one_object_policy'])
+], 
+    ids = ['put_object', 'get_object', 'delete_object'],                     
+    indirect = ['multiple_s3_clients', 'bucket_with_one_object_policy'])
 
 # ## Asserting if the owner has permissions blocked from own bucket
 def test_allow_policy_operations_by_owner(multiple_s3_clients, bucket_with_one_object_policy, boto3_action,expected):
