@@ -15,7 +15,7 @@ jobs:
           - basic
           - presign
           - bucket_versioning
-          # - locking
+          - not cli and locking
           # - policy
     uses: ./.github/workflows/run-tests.yml
     with:
