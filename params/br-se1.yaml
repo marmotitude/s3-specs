@@ -3,4 +3,5 @@ default_profile_index: 0
 profiles:
   -
     profile_name: "br-se1"
+    mgc_path: "../custom-mgc/mgc"
     lock_mode: "COMPLIANCE"
