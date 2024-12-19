@@ -270,3 +270,77 @@ def update_existing_keys(main_dict, sub_dict):
             main_dict[key] = sub_dict[key]
 
     return main_dict
+
+# TODO: not cool, #eventualconsistency
+def wait_for_bucket_version(s3_client, bucket_name):
+    retries = 0
+    versioning_status = "Unknown"
+    while versioning_status != "Enabled" and retries < 10:
+        logging.info(f"[wait_for_bucket_version] check ({retries}) if the bucket version status got propagated...")
+        versioning_status = s3_client.get_bucket_versioning(
+            Bucket=bucket_name
+        ).get('Status')
+        retries += 1
+        time.sleep(retries * retries)
+    assert versioning_status == "Enabled", "Setup error: versioned bucket is not actually versioned"
+
+    return versioning_status
+
+# TODO: not cool, #eventualconsistency
+def replace_failed_put_without_version(s3_client, bucket_name, object_key, object_content):
+
+    retries = 0
+    interval_multiplier = 3 # seconds
+    start_time = datetime.now()
+    object_version = None
+    while not object_version and retries < 10:
+        retries += 1
+
+        # create a new object key
+        new_object_key = f"object_key_{retries}"
+
+        logging.info(f"attempt ({retries}): key:{new_object_key}")
+        wait_time = retries * retries * interval_multiplier
+        logging.info(f"wait {wait_time} seconds")
+        time.sleep(wait_time)
+
+        # delete object (marker?) on the strange object without version id
+        s3_client.delete_object(Bucket=bucket_name, Key=object_key)
+
+        # check again the bucket versioning status
+        versioning_status = wait_for_bucket_version(s3_client, bucket_name)
+        logging.info(f"check again ({retries}) that bucket versioning status: {versioning_status}")
+        # put the object again in the hopes that this time it will have a version id
+        response = s3_client.put_object(Bucket=bucket_name, Key=new_object_key, Body=object_content)
+
+        # check if it has version id
+        object_version = response.get("VersionId")
+        logging.info(f"version:{object_version}")
+    end_time = datetime.now()
+    logging.info(f"total consistency wait time={end_time - start_time}")
+
+    return object_version, new_object_key
+
+# TODO: review when #eventualconsistency stops being so bad
+def put_object_lock_configuration_with_determination(s3_client, bucket_name, configuration):
+    retries = 0
+    interval_multiplier = 3 # seconds
+    response = None
+    start_time = datetime.now()
+    while retries < 10:
+        retries += 1
+        try:
+            response = s3_client.put_object_lock_configuration(
+                Bucket=bucket_name,
+                ObjectLockConfiguration=configuration
+            )
+            break
+        except Exceprion as e:
+            logging.error(f"Error ({retries}): {e}")
+            wait_time = retries * retries * interval_multiplier
+            logging.info(f"wait {wait_time} seconds")
+            time.sleep(wait_time)
+    end_time = datetime.now()
+    logging.info(f"total consistency wait time={end_time - start_time}")
+    return response
+

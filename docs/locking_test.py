@@ -41,6 +41,8 @@ from s3_helpers import (
     create_bucket_and_wait,
     put_object_and_wait,
     cleanup_old_buckets,
+    wait_for_bucket_version,
+    replace_failed_put_without_version,
 )
 config = os.getenv("CONFIG", config)
 # -
@@ -83,6 +85,11 @@ def versioned_bucket_with_lock_config(s3_client, versioned_bucket_with_one_objec
     second_object_key = "post-lock-object.txt"
     post_lock_content = b"Content for object after lock configuration"
     second_version_id = put_object_and_wait(s3_client, bucket_name, second_object_key, post_lock_content)
+    if not second_version_id:
+        second_version_id, second_object_key = replace_failed_put_without_version(s3_client, bucket_name, second_object_key, post_lock_content)
+
+    assert second_version_id, "Setup failed, could not get VersionId from put_object in versioned bucket"
+
     logging.info(f"Uploaded post-lock object: {bucket_name}/{second_object_key} with version ID {second_version_id}")
 
     # Yield details for tests to use
