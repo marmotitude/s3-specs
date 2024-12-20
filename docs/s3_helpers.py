@@ -130,8 +130,7 @@ def put_object_and_wait(s3_client, bucket_name, object_key, content):
 
     # Log confirmation
     logging.info(
-        f"Object '{object_key}' in bucket '{bucket_name}' confirmed as uploaded. "
-        f"Version ID: {version_id}"
+        f"Object '{object_key}' in bucket '{bucket_name}' confirmed as uploaded. Version ID: {version_id}"
     )
 
     return version_id
@@ -270,3 +269,110 @@ def update_existing_keys(main_dict, sub_dict):
             main_dict[key] = sub_dict[key]
 
     return main_dict
+
+# TODO: not cool, #eventualconsistency
+def replace_failed_put_without_version(s3_client, bucket_name, object_key, object_content):
+
+    retries = 0
+    interval_multiplier = 3 # seconds
+    start_time = datetime.now()
+    object_version = None
+    while not object_version and retries < 10:
+        retries += 1
+
+        # create a new object key
+        new_object_key = f"object_key_{retries}"
+
+        logging.info(f"attempt ({retries}): key:{new_object_key}")
+        wait_time = retries * retries * interval_multiplier
+        logging.info(f"wait {wait_time} seconds")
+        time.sleep(wait_time)
+
+        # delete object (marker?) on the strange object without version id
+        s3_client.delete_object(Bucket=bucket_name, Key=object_key)
+
+        # put the object again in the hopes that this time it will have a version id
+        response = s3_client.put_object(Bucket=bucket_name, Key=new_object_key, Body=object_content)
+
+        # check if it has version id
+        object_version = response.get("VersionId")
+        logging.info(f"version:{object_version}")
+    end_time = datetime.now()
+    logging.warning(f"[replace_failed_put_without_version] Total consistency wait time={end_time - start_time}")
+
+    return object_version, new_object_key
+
+# TODO: review when #eventualconsistency stops being so bad
+def put_object_lock_configuration_with_determination(s3_client, bucket_name, configuration):
+    retries = 0
+    interval_multiplier = 3 # seconds
+    response = None
+    start_time = datetime.now()
+    while retries < 10:
+        retries += 1
+        try:
+            response = s3_client.put_object_lock_configuration(
+                Bucket=bucket_name,
+                ObjectLockConfiguration=configuration
+            )
+            break
+        except Exception as e:
+            logging.error(f"Error ({retries}): {e}")
+            wait_time = retries * retries * interval_multiplier
+            logging.info(f"wait {wait_time} seconds")
+            time.sleep(wait_time)
+    end_time = datetime.now()
+    logging.warning(f"[put_object_lock_configuration_with_determination] Total consistency wait time={end_time - start_time}")
+    return response
+
+# TODO: review when #eventualconsistency stops being so bad
+def get_object_retention_with_determination(s3_client, bucket_name, object_key):
+    retries = 0
+    interval_multiplier = 3 # seconds
+    response = None
+    start_time = datetime.now()
+    while retries < 20:
+        retries += 1
+        try:
+            # make 5 GETs in an attempt to get responses from all replicas
+            response = s3_client.get_object_retention( Bucket=bucket_name, Key=object_key,)
+            response2 = s3_client.get_object_retention( Bucket=bucket_name, Key=object_key,)
+            response3 = s3_client.get_object_retention( Bucket=bucket_name, Key=object_key,)
+            response4 = s3_client.get_object_retention( Bucket=bucket_name, Key=object_key,)
+            response5 = s3_client.get_object_retention( Bucket=bucket_name, Key=object_key,)
+            break
+        except Exception as e:
+            logging.error(f"[get_object_retention_with_determination] Error ({retries}): {e}")
+            wait_time = retries * retries * interval_multiplier
+            logging.info(f"wait {wait_time} seconds")
+            time.sleep(wait_time)
+    end_time = datetime.now()
+    logging.warning(f"[get_object_retention_with_determination] Total consistency wait time={end_time - start_time}")
+    assert response and response.get("Retention"), "Setup error, object dont have retention"
+    return response
+
+
+# TODO: review when #eventualconsistency stops being so bad
+def get_object_lock_configuration_with_determination(s3_client, bucket_name):
+    retries = 0
+    interval_multiplier = 3 # seconds
+    response = None
+    start_time = datetime.now()
+    while retries < 20:
+        retries += 1
+        try:
+            # make 5 GETs in an attempt to get responses from all replicas
+            response = s3_client.get_object_lock_configuration(Bucket=bucket_name)
+            response2 = s3_client.get_object_lock_configuration(Bucket=bucket_name)
+            response3 = s3_client.get_object_lock_configuration(Bucket=bucket_name)
+            response4 = s3_client.get_object_lock_configuration(Bucket=bucket_name)
+            response5 = s3_client.get_object_lock_configuration(Bucket=bucket_name)
+            break
+        except Exception as e:
+            logging.error(f"[get_object_lock_configuration_with_determination] Error ({retries}): {e}")
+            wait_time = retries * retries * interval_multiplier
+            logging.info(f"wait {wait_time} seconds")
+            time.sleep(wait_time)
+    end_time = datetime.now()
+    logging.warning(f"[get_object_lock_configuration_with_determination] Total consistency wait time={end_time - start_time}")
+    return response
