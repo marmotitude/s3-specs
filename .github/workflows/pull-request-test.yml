@@ -15,6 +15,7 @@ jobs:
           - basic
           - presign
           - bucket_versioning
+          - not cli and locking
           # - policy
     uses: ./.github/workflows/run-tests.yml
     with:
@@ -32,14 +33,14 @@ jobs:
           exit 0
 
 
-  # since locking is a feature currently under preview, we run it separatedely
+  # since locking feature on mgc cli still have 1 issue, we run it separatedely
   # and dont block merges if they fail
-  run-locking-tests:
+  run-locking-cli-tests:
     strategy:
       fail-fast: false
       matrix:
         category:
-          - not cli and locking
+          - cli and locking
         config:
           - "../params/br-ne1.yaml"
           - "../params/br-se1.yaml"
