@@ -111,12 +111,15 @@ def test_set_object_lock(cmd_template, active_mgc_workspace, mgc_path, bucket_wi
     assert result.returncode == 0, f"Command failed with error: {result.stderr}"
     logging.info(f"Output from {cmd_template}: {result.stdout}")
 
-    # Verify the object lock configuration using the s3_client fixture
-    response = s3_client.head_object(Bucket=bucket_name, Key=object_key)
+    # Use get_object_retention to check object-level retention details
+    logging.info("Retrieving object retention details...")
+    retention_info = s3_client.get_object_retention(Bucket=bucket_name, Key=object_key)
 
     # Ensure the object lock configuration matches the expected retain-until date
-    assert 'ObjectLockRetainUntilDate' in response, "Object lock configuration not found in object metadata"
-    returned_date = response['ObjectLockRetainUntilDate'].date().isoformat()
+    assert 'RetainUntilDate' in retention_info["Retention"], "Object lock configuration not found in object metadata"
+    logging.info(f"Retention verified as applied with mode {retention_info['Retention']['Mode']} "
+          f"and retain until {retention_info["Retention"]['RetainUntilDate']}.")
+    returned_date = retention_info["Retention"]['RetainUntilDate'].date().isoformat()
     assert returned_date == retain_until_date, (
         f"Expected retain-until-date {retain_until_date}, but got {returned_date.isoformat()}"
     )
