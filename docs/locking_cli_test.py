@@ -77,6 +77,33 @@ def test_get_bucket_default_lock(cmd_template, active_mgc_workspace, mgc_path, b
 run_example(__name__, "test_get_bucket_default_lock", config=config)
 # -
 
+# ### Remover a Configuração de uma trava padrão
+#
+# Para remover uma regra de retenção padrão presente em um bucket para que novos objetos escritos
+# neste bucket não mais sejam criados com uma regra de retenção, utilize
+# o comando `object-storage buckets object-lock unset`, exemplos:
+
+commands = [
+    "{mgc_path} object-storage buckets object-lock unset {bucket_name}",
+    "{mgc_path} os buckets object-lock unset --dst {bucket_name}",
+]
+
+# + {"jupyter": {"source_hidden": true}}
+@pytest.mark.parametrize("cmd_template", commands)
+def test_unset_bucket_default_lock(cmd_template, active_mgc_workspace, mgc_path, lockeable_bucket_name):
+    cmd = split(cmd_template.format(mgc_path=mgc_path, bucket_name=lockeable_bucket_name))
+
+    result = subprocess.run(cmd, capture_output=True, text=True)
+
+    assert result.returncode == 0, f"Command failed with error: {result.stderr}"
+    logging.info(f"Output from {cmd_template}: {result.stdout}")
+
+    # TODO: upload a new object and check its retention info
+
+run_example(__name__, "test_unset_bucket_default_lock", config=config)
+# -
+
+
 # ### Configurar uma trava em apenas um objeto específico
 #
 # Para setar uma regra de retenção a apenas um objeto em específico, utilize
